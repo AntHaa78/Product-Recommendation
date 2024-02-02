@@ -9,4 +9,4 @@ Online E-commerce websites like Amazon, E-bay use different recommendation model
 # References
 The dataset here is taken from the below website.
 
-Source - Amazon Reviews data ([http://jmcauley.ucsd.edu/data/amazon/](https://cseweb.ucsd.edu/~jmcauley/datasets.html#amazon_reviews)) The repository has several datasets. For this case study, we are using the Videogames dataset.
+Source - Amazon Reviews data https://cseweb.ucsd.edu/~jmcauley/datasets/amazon_v2/ The repository has several datasets. For this case study, we are using the Videogames dataset.
