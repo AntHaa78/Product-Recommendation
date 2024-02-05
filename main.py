@@ -137,7 +137,7 @@ random_users = random.sample(range(1, 500), 3)
 videogames_df_CF = pd.concat([train_data, test_data]).reset_index()
 #print('\n', videogames_df_CF.head())
 
-#Matrix with row per user and column per product
+#Matrix with row = user and column = product
 pivot_df = videogames_df_CF.pivot_table(index='userID', columns='productID', values = 'ratings', aggfunc='mean').fillna(0)
 #print(pivot_df.head())
 print('Shape of the pivot table: ', pivot_df.shape)
@@ -145,9 +145,51 @@ print('Shape of the pivot table: ', pivot_df.shape)
 # Define user index from 0 to 10
 pivot_df['user_index'] = np.arange(pivot_df.shape[0])
 pivot_df.set_index(['user_index'], inplace=True)
-#print(pivot_df.head())
-# Another sparse matrix, lets use Singular Value Decomposition (SVD)
+print(pivot_df.head())
+# Another sparse matrix. Lets use matrix factorization to build our model
 
-# Singlular Value Decomposition
-U, sigma, Vt = svds(pivot_df, k=10)
-print("Left singular matrix: \n", U)
+# Matrix Factorization using Singular Value Decomposition (SVD). (pivot df dataframe->np.ndarray)
+
+U, s, V = svds(pivot_df.to_numpy(), k=10)
+#print("U matrix(users): \n", U, "\n Sigma matrix: \n", s, "\nV matrix (products): \n", V)
+
+# Sigma is not diagonal
+s = np.diag(s)
+#print('Diagonal matrix: \n',s)
+
+#Predicted ratings
+all_user_predicted_ratings = np.dot(np.dot(U, s), V) 
+# Convert predicted ratings to dataframe
+preds_df = pd.DataFrame(all_user_predicted_ratings, columns = pivot_df.columns)
+#print(preds_df.head())
+
+# Recommend the videogames with the highest predicted ratings
+def recommend_videogames(user, pivot_df, preds_df, num_recommendations):
+    sorted_user_ratings = pivot_df.loc[user-1].sort_values(ascending=False)
+    sorted_user_predictions = preds_df.loc[user-1].sort_values(ascending=False)
+    result = pd.concat([sorted_user_ratings, sorted_user_predictions], axis=1)
+    result.index.name = 'Recommended items'
+    result.columns = ['user_ratings', 'user_predictions']
+    result = result.loc[result.user_ratings==0]
+    result = result.sort_values('user_predictions', ascending=False)
+    print('\nHere are the recommended videogames for user number: ', user)
+    print(result.head(num_recommendations))
+
+
+num_recommendations = 5
+users = [1,5,8]
+#[recommend_videogames(i, pivot_df, preds_df, num_recommendations) for i in users]
+# -> Different recommended items depending on user and their past behaviour
+
+# Evaluation of model, Root Mean Squared Error (RMSE)
+
+final_ratings_matrix.mean() # average  actual rating for each item
+preds_df.mean() #average predicted rating for each item
+
+rmse_df = pd.concat([final_ratings_matrix.mean(), preds_df.mean()], axis=1)
+rmse_df.columns = ['avg_actual_ratings', 'avg_predicted_ratings']
+rmse_df['item_index'] = np.arange(0, rmse_df.shape[0], 1)
+#print(rmse_df.head())
+
+RMSE = round((((rmse_df.avg_actual_ratings - rmse_df.avg_predicted_ratings) ** 2).mean() ** 0.5), 3)
+print('\nRMSE SVD model = ', RMSE)
