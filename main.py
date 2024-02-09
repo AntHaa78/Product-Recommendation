@@ -33,14 +33,15 @@ def load_data():
         else:
             print('\nFile does not exist. Try again')
     columns = ['userID', 'productID', 'ratings', 'timestamp']
-    videogames_df=pd.read_csv(filename, names=columns)
-    videogames_df.drop(columns=['timestamp'], inplace=True)
+    df=pd.read_csv(filename, names=columns)
+    df.drop(columns=['timestamp'], inplace=True)
     #rows, columns = videogames_df.shape
-    return videogames_df
+    return filename, df
 
-def subset(videogames_df, int):
-    videogames_df_sub=videogames_df.iloc[:int]
-    return videogames_df_sub
+def subset(dataframe, int):
+    # take a subset from 0/1 to int
+    dataframe_sub=dataframe.iloc[:int]
+    return dataframe_sub
 
 def missing_value_check(dataframe):
     print("\nNumber of missing values across columns:\n", dataframe.isnull().sum())
@@ -52,22 +53,23 @@ def missing_value_check(dataframe):
 def plotting(dataframe):
     print("\nHere is the detail count of ratings.")
     print(dataframe['ratings'].value_counts())    
-    answer = input("\nWould you like to see a plot of these values?: ")
+    answer = input("\nWould you like to see a visual representation(plot)?: ")
     if answer == 'y':
         dataframe.groupby('userID')['ratings'].count().sort_values(ascending=False)
         ax = sns.countplot(x='ratings', data=dataframe, palette = 'Set1', edgecolor = 'black')
         for i in range(0,5):
             ax.bar_label(ax.containers[i])
-            ax.set_ylabel("Total count of ratings")
+            ax.set_ylabel("Rating score")
+            ax.set_ylabel("Number of ratings")
         plt.show()        
 
 def unique_users(dataframe):
     answer = input("\nDo you want to see the number of unique users and products?: ")
     if answer == 'y':
         # Number of unique user id  in the data
-        print('\nNumber of unique users in this videogames data subset: ', dataframe['userID'].nunique())
+        print('\nNumber of unique users in this data subset: ', dataframe['userID'].nunique())
         # Number of unique product id  in the data
-        print('Number of unique products in this videogames data subset: ', dataframe['productID'].nunique())  
+        print('Number of unique products in this data subset: ', dataframe['productID'].nunique())  
         input("\nPress enter to continue...")
 
 
@@ -79,13 +81,13 @@ def top_ten_users(dataframe):
 def top_users_infos(dataframe, numberofratings):
     # print infos about top users selected based on minimum amount of ratings
     print(f"\nNumber of unique users that provided more than {numberofratings} ratings: {dataframe['userID'].nunique()}")
-    print('Number of unique products in final data: ', dataframe['productID'].nunique())
-    print('Number of products in final data: ', len(dataframe))
+    print(f'Number of unique products rated by these {dataframe['userID'].nunique()} users: : {dataframe['productID'].nunique()}')
+    print('Number of total products rated: ', len(dataframe))
     print(f'{len(dataframe)-dataframe['productID'].nunique()} products have been given two or more ratings')
     # checking top 10 products with most ratings
-    answer = input("\nDo you want to see the top 10 products based on ratings?: ")
+    answer = input("\nDo you want to see the top 10 products based on number ratings?: ")
     if answer == 'y':
-        print("\nTop 10 products based on number of ratings:\n")
+        print("\nTop 10 products based on number of ratings alone:\n")
         print(dataframe.groupby("productID").size().sort_values(ascending=False)[:10])
 
 def matrix_density(dataframe):
@@ -105,86 +107,110 @@ def matrix_density(dataframe):
 def popularity_model(dataframe):
     # Count number of ratings from different users (=score) and average rating for each unique product as a recommendation score.
     train_data_grouped = dataframe.groupby('productID').agg({'userID': 'count','ratings': 'mean'}).reset_index()
-    train_data_grouped.rename(columns={'ratings': 'average rating'}, inplace=True)
-    train_data_grouped.rename(columns = {'userID': 'score'}, inplace=True)
+    train_data_grouped.rename(columns = {'userID': 'number of ratings'}, inplace=True)
+    train_data_grouped.rename(columns={'ratings': 'average rating'}, inplace=True)  
     # Sort the products based on the score (total number of ratings). If number of ratings are equal, sort by average
     # rating. Print top 10
-    train_data_sort = train_data_grouped.sort_values(['score', 'average rating'], ascending=False)
+    train_data_sort = train_data_grouped.sort_values(['number of ratings', 'average rating'], ascending=False)
     print("\nHere are the top 10 recommended products")
     print(train_data_sort.head(10))
-    # Selecting further, deciding of a minimum average rating (will bypass score) and final the number of recommendations
+    # Selecting further, deciding of a minimum average rating (will bypass score) and finally the number of recommendations the model proposes
     minimum_rating = float(input("\nSelect a minimum average rating: "))
     number_of_recommendations = int(input("How many recommendations do you want to make?: "))
     popularity_recommendations = train_data_sort.loc[train_data_sort['average rating'] >= minimum_rating]
-    popularity_recommendations['rank'] = popularity_recommendations['score'].rank(ascending=0, method='first') # add of rank column
-    print(popularity_recommendations.head(number_of_recommendations))
+    popularity_recommendations['rank'] = popularity_recommendations['number of ratings'].rank(ascending=0, method='first') # add of rank column
+    print(f'\nHere is your top {number_of_recommendations} recommended products! All users will be recommended these.\n\n', popularity_recommendations.head(number_of_recommendations))
     return popularity_recommendations
+
+
+
+def collaborative_filtering_model(matrix, number_of_users):
+
+    # Define user index from 0 to number of user
+    matrix['user_index'] = np.arange(matrix.shape[0])
+    matrix.set_index(['user_index'], inplace=True)
+    print(matrix.head(number_of_users))
+    #Lets use matrix factorization to build our model
+    # Matrix Factorization using Singular Value Decomposition (SVD). (pivot df dataframe->np.ndarray)
+
+    U, s, V = svds(matrix.to_numpy(), k=number_of_users-1)
+    #print("U matrix(users): \n", U, "\n Sigma matrix: \n", s, "\nV matrix (products): \n", V)
+
+    # Sigma is not diagonal
+    s = np.diag(s)
+    print('Diagonal matrix: \n',s)
+
+    #Predicted ratings
+    all_user_predicted_ratings = np.dot(np.dot(U, s), V) 
+    # Convert predicted ratings to a dataframe
+    predictions_df = pd.DataFrame(all_user_predicted_ratings, columns = matrix.columns)
+    print(predictions_df.head(number_of_users))
 
 if __name__ == '__main__': 
     # load data from files
-    #videogames_df = load_data()
-    columns = ['userID', 'productID', 'ratings', 'timestamp'] #testing
-    videogames_df=pd.read_csv('Video_Games.csv', names=columns) #testing
-    rows, columns = videogames_df.shape
-    print(f"\nThe data set has {rows} rows (number of ratings) and {columns} columns")
+    filename, df = load_data()
+    #columns = ['userID', 'productID', 'ratings', 'timestamp'] #testing
+    #df=pd.read_csv('Video_Games.csv', names=columns) #testing
+    rows, columns = df.shape
+    print(f"\nThe {filename} data set has {rows} rows (number of ratings) and {columns} columns")
 
     #ask user if wants to see quick summary of data
     answer = input("\nDo you want to see the dataframe infos?: ")
     if answer == 'y':
-        print('\n', videogames_df.info())     
+        print('\n\n', df.info())     
 
-    #take a subset (large data amount)
+    #take a subset (large data amount). (add randomize?)
     subset_number = int(input('\nWhat subset would you like to take (number of rows)?: '))
-    videogames_df_sub = subset(videogames_df, subset_number)
-    del videogames_df
+    df_sub = subset(df, subset_number)
+    del df
 
  
     #more explicit infos about ratings variable
     answer = input("\nDo you want to see a summary statistics of the ratings variable?: ")
     if answer == 'y':
-        print('\n', videogames_df_sub['ratings'].describe())
-        print(f"Min rating is {videogames_df_sub.ratings.min()} and max rating is {videogames_df_sub.ratings.max()}")
+        print('\n', df_sub['ratings'].describe())
+        print(f"Min rating is {df_sub.ratings.min()} and max rating is {df_sub.ratings.max()}")
         input("\nPress enter to continue...")
     #checking for missing values
     print("\nChecking for missing values...")
-    missing_value_check(videogames_df_sub)
+    missing_value_check(df_sub)
 
     # plot part
-    plotting(videogames_df_sub)
+    plotting(df_sub)
 
     # Checking number of unique users and products
-    unique_users(videogames_df_sub)
+    unique_users(df_sub)
 
     #Giving the top 10 users based on number of ratings given to get a general idea
-    top_ten_users(videogames_df_sub)
+    top_ten_users(df_sub)
 
     # select the number of top users wanted
-    counts = videogames_df_sub.userID.value_counts()
+    counts = df_sub.userID.value_counts()
     number_of_ratings = int(input("\nSet the minimum number of ratings given at: "))  
-    videogames_df_sub_final = videogames_df_sub[videogames_df_sub.userID.isin(counts[counts>number_of_ratings].index)]
-    top_users_infos(videogames_df_sub_final, number_of_ratings)
+    df_sub_final = df_sub[df_sub.userID.isin(counts[counts>number_of_ratings].index)]
+    top_users_infos(df_sub_final, number_of_ratings)
     
     #construction of pivot table. In case of duplicates users/productID (same user giving 2+ rating to a product) we use the mean of ratings(aggfunc) 
     #If a product has no rating from a user, we give it a 0 rating score (fillna(0))
-    final_ratings_matrix = videogames_df_sub_final.pivot_table(index='userID', columns ='productID', values='ratings', aggfunc='mean').fillna(0)
+    final_ratings_matrix = df_sub_final.pivot_table(index='userID', columns ='productID', values='ratings', aggfunc='mean').fillna(0)
     print('Shape of final_ratings_matrix: ', final_ratings_matrix.shape, ': (unique users, unique products)')
 
     # density check of matrix. If d<66% -> sparse matrix
     matrix_density(final_ratings_matrix)
 
-    #Data splitting: split the data randomly into train and test datasets, ratio 70:30
-    train_data, test_data = train_test_split(videogames_df_sub_final, test_size = 0.3, random_state=0)
+    #Data splitting: split the data randomly into train and test datasets, ratio 70:30. 
+    #train_data, test_data = train_test_split(df_sub_final, test_size = 0.3, random_state=0)
 
     # Choose a prediction model
     answer = input("\nWhat model would you like to make?\n1) Popularity recommender model\n2)Collaborative Filtering recommender model\n")
     while answer != '1' and answer !='2':
         answer = input("Please type 1 or 2 only: ")
     if answer == '1':
-        print("Popularity recommender model")
-        popularity_recommendations = popularity_model(train_data)        
+        print("\n---------------------------------------------------------------------------------------\nPopularity recommender model")
+        popularity_recommendations = popularity_model(df_sub_final)
     if answer == '2':
-        print("Collaborative Filtering recommender model")
-
+        print("\n---------------------------------------------------------------------------------------\nCollaborative Filtering recommender model")
+        collaborative_filtering_model(final_ratings_matrix, final_ratings_matrix.shape[0])
 raise SystemExit(0)
 #load data and give colum names
 columns = ['userID', 'productID', 'ratings', 'timestamp']
